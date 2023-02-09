@@ -50,7 +50,10 @@ int main(int argc, char ** argv)
 
   rclcpp::NodeOptions options;
   auto publisher = std::make_shared<image_publisher::ImagePublisher>(options);
-  publisher->declare_parameter("filename", argv[1]);
+  if (argc > 1 && argv[1][0] != '-') {
+    // There is at least one argument and this is not a parameter or ros argument
+    publisher->set_parameter(rclcpp::Parameter("filename", argv[1]));
+  }
 
   rclcpp::spin(publisher);
   rclcpp::shutdown();

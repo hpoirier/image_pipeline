@@ -54,6 +54,7 @@ ImagePublisher::ImagePublisher(const rclcpp::NodeOptions & options)
 {
   pub_ = image_transport::create_camera_publisher(this, "image_raw");
 
+  filename_ = this->declare_parameter("filename", std::string(""));
   flip_horizontal_ = this->declare_parameter("flip_horizontal", false);
   flip_vertical_ = this->declare_parameter("flip_vertical", false);
   frame_id_ = this->declare_parameter("frame_id", std::string("camera"));
@@ -73,18 +74,12 @@ ImagePublisher::ImagePublisher(const rclcpp::NodeOptions & options)
         if (parameter.get_name() == "filename") {
           filename_ = parameter.as_string();
           RCLCPP_INFO(get_logger(), "Reset filename as '%s'", filename_.c_str());
-          ImagePublisher::onInit();
-          return result;
         } else if (parameter.get_name() == "flip_horizontal") {
           flip_horizontal_ = parameter.as_bool();
           RCLCPP_INFO(get_logger(), "Reset flip_horizontal as '%d'", flip_horizontal_);
-          ImagePublisher::onInit();
-          return result;
         } else if (parameter.get_name() == "flip_vertical") {
           flip_vertical_ = parameter.as_bool();
           RCLCPP_INFO(get_logger(), "Reset flip_vertical as '%d'", flip_vertical_);
-          ImagePublisher::onInit();
-          return result;
         } else if (parameter.get_name() == "frame_id") {
           frame_id_ = parameter.as_string();
           RCLCPP_INFO(get_logger(), "Reset frame_id as '%s'", frame_id_.c_str());
@@ -96,20 +91,34 @@ ImagePublisher::ImagePublisher(const rclcpp::NodeOptions & options)
           RCLCPP_INFO(get_logger(), "Reset camera_info_rul as '%s'", camera_info_url_.c_str());
         }
       }
-      ImagePublisher::reconfigureCallback();
+      if (!filename_.empty()) {
+        ImagePublisher::onInit();
+      }
       return result;
     };
   on_set_parameters_callback_handle_ = this->add_on_set_parameters_callback(param_change_callback);
+
+  if (!filename_.empty()) {
+    ImagePublisher::onInit();
+  }
 }
 
 void ImagePublisher::reconfigureCallback()
 {
-  timer_ = this->create_wall_timer(
-    std::chrono::milliseconds(static_cast<int>(1000 / publish_rate_)),
-    std::bind(&ImagePublisher::doWork, this));
-
+  if (camera_info_url_.empty()) {
+    RCLCPP_INFO(get_logger(), "No camera_info_url exist. Using default");
+    camera_info_.width = width;
+    camera_info_.height = height;
+    camera_info_.distortion_model = "plumb_bob";
+    camera_info_.d = {0, 0, 0, 0, 0};
+    camera_info_.k = {1, 0, static_cast<float>(camera_info_.width / 2), 0, 1,
+      static_cast<float>(camera_info_.height / 2), 0, 0, 1};
+    camera_info_.r = {1, 0, 0, 0, 1, 0, 0, 0, 1};
+    camera_info_.p = {1, 0, static_cast<float>(camera_info_.width / 2), 0, 0, 1,
+      static_cast<float>(camera_info_.height / 2), 0, 0, 0, 1, 0};
+  }
+  else{
   camera_info_manager::CameraInfoManager c(this);
-  if (!camera_info_url_.empty()) {
     RCLCPP_INFO(get_logger(), "camera_info_url exist");
     try {
       c.validateURL(camera_info_url_);
@@ -120,8 +129,6 @@ void ImagePublisher::reconfigureCallback()
         this->get_logger(), "camera calibration failed to load: %s %s %s %i",
         e.err.c_str(), e.func.c_str(), e.file.c_str(), e.line);
     }
-  } else {
-    RCLCPP_INFO(get_logger(), "no camera_info_url exist");
   }
 }
 
@@ -160,6 +167,10 @@ void ImagePublisher::doWork()
 void ImagePublisher::onInit()
 {
   RCLCPP_INFO(this->get_logger(), "File name for publishing image is : %s", filename_.c_str());
+  if (timer_) {
+    timer_->cancel();
+  }
+
   try {
     image_ = cv::imread(filename_, cv::IMREAD_COLOR);
     if (image_.empty()) {  // if filename not exist, open video device
@@ -207,15 +218,7 @@ void ImagePublisher::onInit()
     flip_image_ = false;
   }
 
-  camera_info_.width = image_.cols;
-  camera_info_.height = image_.rows;
-  camera_info_.distortion_model = "plumb_bob";
-  camera_info_.d = {0, 0, 0, 0, 0};
-  camera_info_.k = {1, 0, static_cast<float>(camera_info_.width / 2), 0, 1,
-    static_cast<float>(camera_info_.height / 2), 0, 0, 1};
-  camera_info_.r = {1, 0, 0, 0, 1, 0, 0, 0, 1};
-  camera_info_.p = {1, 0, static_cast<float>(camera_info_.width / 2), 0, 0, 1,
-    static_cast<float>(camera_info_.height / 2), 0, 0, 0, 1, 0};
+  initCameraInfo(image_.cols, image_.rows);
 
   timer_ = this->create_wall_timer(
     std::chrono::milliseconds(static_cast<int>(1000 / publish_rate_)),
