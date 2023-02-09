@@ -103,7 +103,7 @@ ImagePublisher::ImagePublisher(const rclcpp::NodeOptions & options)
   }
 }
 
-void ImagePublisher::reconfigureCallback()
+void ImagePublisher::initCameraInfo(uint32_t width, uint32_t height)
 {
   if (camera_info_url_.empty()) {
     RCLCPP_INFO(get_logger(), "No camera_info_url exist. Using default");
