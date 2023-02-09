@@ -51,7 +51,7 @@ public:
 protected:
   void onInit();
   void doWork();
-  void reconfigureCallback();
+  void initCameraInfo(uint32_t width = 0, uint32_t height = 0);
 
 private:
   image_transport::CameraPublisher pub_;
