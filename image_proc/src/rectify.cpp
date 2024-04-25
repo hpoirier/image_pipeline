@@ -39,6 +39,7 @@
 #include <image_proc/rectify.hpp>
 #include <image_transport/image_transport.hpp>
 #include <opencv2/imgproc.hpp>
+#include <opencv2/core.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/camera_info.hpp>
 #include <sensor_msgs/msg/image.hpp>
@@ -137,12 +138,20 @@ void RectifyNode::imageCb(
   cv::Mat rect;
 
   // Rectify and publish
-  model_.rectifyImage(image, rect, interpolation);
-
-  // Allocate new rectified image message
-  sensor_msgs::msg::Image::SharedPtr rect_msg =
-    cv_bridge::CvImage(image_msg->header, image_msg->encoding, rect).toImageMsg();
-  pub_rect_.publish(rect_msg);
+  bool success = false;
+  try {
+    model_.rectifyImage(image, rect, interpolation);
+    success = true;
+  }
+  catch(cv::Exception &e) {
+    RCLCPP_ERROR(this->get_logger(), "cv::rectifyImage() failed: '%s'", e.what());
+  }
+  if (success) {
+    // Allocate new rectified image message
+    sensor_msgs::msg::Image::SharedPtr rect_msg =
+      cv_bridge::CvImage(image_msg->header, image_msg->encoding, rect).toImageMsg();
+    pub_rect_.publish(rect_msg);
+  }
 
   TRACEPOINT(
     image_proc_rectify_fini,
